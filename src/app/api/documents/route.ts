@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { writeFile } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
 import { getServerSession } from "next-auth";
@@ -51,9 +51,11 @@ export async function POST(request: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const fileName = `${randomUUID()}.pdf`;
-  const filePath = join(process.cwd(), "uploads", fileName);
+  const uploadsDir = join(process.cwd(), "uploads");
+  const filePath = join(uploadsDir, fileName);
 
   try {
+    await mkdir(uploadsDir, { recursive: true });
     await writeFile(filePath, buffer);
 
     const document = await prisma.document.create({
