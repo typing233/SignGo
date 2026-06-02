@@ -112,8 +112,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     data: { status: "pending" },
   });
 
-  // Send invitation emails
+  // Send invitation emails and track results
   const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+  const emailResults: { email: string; success: boolean; error?: string }[] = [];
+
   for (const proc of createdProcesses) {
     try {
       await sendSigningInvitation({
@@ -123,10 +125,34 @@ export async function POST(request: Request, { params }: RouteParams) {
         senderName: session.user.name || session.user.email || "用户",
         signUrl: `${baseUrl}/sign/${proc.token}`,
       });
+      emailResults.push({ email: proc.signerEmail, success: true });
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : "未知错误";
       console.error(`Failed to send email to ${proc.signerEmail}:`, e);
+      emailResults.push({ email: proc.signerEmail, success: false, error: errMsg });
     }
   }
 
-  return NextResponse.json({ success: true, processes: createdProcesses });
+  const failedEmails = emailResults.filter((r) => !r.success);
+
+  if (failedEmails.length === emailResults.length) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "所有邮件发送失败，请检查邮件服务配置",
+        emailResults,
+        processes: createdProcesses,
+      },
+      { status: 502 }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    processes: createdProcesses,
+    emailResults,
+    warning: failedEmails.length > 0
+      ? `${failedEmails.length} 封邮件发送失败：${failedEmails.map((f) => f.email).join("、")}`
+      : undefined,
+  });
 }

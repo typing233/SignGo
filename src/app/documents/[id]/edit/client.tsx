@@ -104,6 +104,7 @@ export function DocumentEditorClient({ document }: { document: DocumentData }) {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
   const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   const handleDrop = useCallback(
@@ -162,6 +163,28 @@ export function DocumentEditorClient({ document }: { document: DocumentData }) {
     }
   };
 
+  const moveSigner = (index: number, direction: "up" | "down") => {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= signers.length) return;
+
+    setSigners((prev) => {
+      const next = [...prev];
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next.map((s, i) => ({ ...s, order: i + 1 }));
+    });
+
+    setFields((prev) =>
+      prev.map((f) => {
+        if (f.signerIndex === index) return { ...f, signerIndex: targetIndex };
+        if (f.signerIndex === targetIndex) return { ...f, signerIndex: index };
+        return f;
+      })
+    );
+
+    if (activeSignerIndex === index) setActiveSignerIndex(targetIndex);
+    else if (activeSignerIndex === targetIndex) setActiveSignerIndex(index);
+  };
+
   const updateSigner = (index: number, key: keyof Signer, value: string | number) => {
     setSigners((prev) => prev.map((s, i) => (i === index ? { ...s, [key]: value } : s)));
   };
@@ -181,6 +204,7 @@ export function DocumentEditorClient({ document }: { document: DocumentData }) {
 
     setSubmitting(true);
     setError("");
+    setWarning("");
 
     try {
       const res = await fetch(`/api/documents/${document.id}/signing-processes`, {
@@ -201,9 +225,24 @@ export function DocumentEditorClient({ document }: { document: DocumentData }) {
         }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "创建签署流程失败");
+        if (data.emailResults) {
+          const failed = data.emailResults.filter((r: { success: boolean }) => !r.success);
+          setError(
+            `邮件发送失败（${failed.length}/${data.emailResults.length}）：${failed.map((r: { email: string }) => r.email).join("、")}。请检查邮箱地址或邮件服务配置后重试。`
+          );
+        } else {
+          setError(data.error || "创建签署流程失败");
+        }
+        return;
+      }
+
+      if (data.warning) {
+        setWarning(data.warning + "。这些签署方未收到邮件，您可以手动将链接发送给他们。");
+        // Don't navigate away — let user see the warning
+        return;
       }
 
       router.push(`/documents/${document.id}`);
@@ -241,6 +280,18 @@ export function DocumentEditorClient({ document }: { document: DocumentData }) {
         </div>
       )}
 
+      {warning && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-yellow-800 text-sm flex items-center justify-between">
+          <span>{warning}</span>
+          <button
+            onClick={() => router.push(`/documents/${document.id}`)}
+            className="ml-4 px-3 py-1 bg-yellow-600 text-white rounded text-xs hover:bg-yellow-700"
+          >
+            确认并返回
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar - Signers & Fields */}
         <div className="w-80 border-r bg-gray-50 overflow-y-auto p-4 shrink-0">
@@ -260,16 +311,34 @@ export function DocumentEditorClient({ document }: { document: DocumentData }) {
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-gray-500">
-                      签署方 {idx + 1} (顺序: {signer.order})
+                      第 {idx + 1} 位签署
                     </span>
-                    {signers.length > 1 && (
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <button
-                        onClick={(e) => { e.stopPropagation(); removeSigner(idx); }}
-                        className="text-red-400 hover:text-red-600 text-xs"
+                        onClick={() => moveSigner(idx, "up")}
+                        disabled={idx === 0}
+                        className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                        title="上移"
                       >
-                        删除
+                        ↑
                       </button>
-                    )}
+                      <button
+                        onClick={() => moveSigner(idx, "down")}
+                        disabled={idx === signers.length - 1}
+                        className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                        title="下移"
+                      >
+                        ↓
+                      </button>
+                      {signers.length > 1 && (
+                        <button
+                          onClick={() => removeSigner(idx)}
+                          className="text-red-400 hover:text-red-600 text-xs ml-1"
+                        >
+                          删除
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <input
                     type="text"
