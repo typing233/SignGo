@@ -51,6 +51,14 @@ export default async function DocumentDetailPage({
           <span>状态: {statusLabels[document.status] || document.status}</span>
           <span>上传时间: {new Date(document.createdAt).toLocaleString("zh-CN")}</span>
         </div>
+        <div className="mt-4">
+          <Link
+            href={`/documents/${document.id}/edit`}
+            className="inline-block px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+          >
+            设置签署字段
+          </Link>
+        </div>
       </div>
 
       {document.signingProcesses.length > 0 && (
