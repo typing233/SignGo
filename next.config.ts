@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  serverExternalPackages: ["@prisma/client", "bcryptjs"],
+  turbopack: {
+    resolveAlias: {
+      canvas: "",
+    },
+  },
 };
 
 export default nextConfig;

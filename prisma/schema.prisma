@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  documents Document[]
+}
+
+model Document {
+  id       String @id @default(cuid())
+  name     String
+  filePath String
+  fileSize Int
+  status   String @default("uploaded")
+  ownerId  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner            User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  signingProcesses SigningProcess[]
+}
+
+model SigningProcess {
+  id          String    @id @default(cuid())
+  documentId  String
+  signerName  String
+  signerEmail String
+  status      String    @default("pending")
+  signedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
